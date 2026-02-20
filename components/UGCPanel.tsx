@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -114,13 +115,14 @@ const UGCPanel: React.FC<UGCPanelProps> = ({ currentImage, onNavigateToGenerate,
                     <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">Target Platform</label>
                     <div className="flex gap-2 p-1 bg-[var(--bg-input)] rounded-xl border border-white/5">
                         {platforms.map(p => (
-                            <button 
-                                key={p}
-                                onClick={() => setPlatform(p)}
-                                className={`flex-1 py-2.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all duration-300 ${platform === p ? 'bg-white text-black shadow-md' : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'}`}
-                            >
-                                {p}
-                            </button>
+                            <Tooltip key={p} text={`Optimize brief for ${p}`} className="flex-1">
+                                <button 
+                                    onClick={() => setPlatform(p)}
+                                    className={`w-full py-2.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all duration-300 ${platform === p ? 'bg-white text-black shadow-md' : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'}`}
+                                >
+                                    {p}
+                                </button>
+                            </Tooltip>
                         ))}
                     </div>
                 </div>
@@ -128,28 +130,32 @@ const UGCPanel: React.FC<UGCPanelProps> = ({ currentImage, onNavigateToGenerate,
                 <div className="grid grid-cols-1 gap-4">
                     <div className="space-y-1.5">
                         <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">Visual Theme</label>
-                        <div className="relative">
-                            <select 
-                                value={theme}
-                                onChange={(e) => setTheme(e.target.value)}
-                                className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-white rounded-xl p-3.5 text-[11px] font-medium outline-none appearance-none hover:border-white/20 transition-colors cursor-pointer"
-                            >
-                                {themes.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
-                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        <Tooltip text="Select the overall aesthetic direction" className="w-full">
+                            <div className="relative w-full">
+                                <select 
+                                    value={theme}
+                                    onChange={(e) => setTheme(e.target.value)}
+                                    className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-white rounded-xl p-3.5 text-[11px] font-medium outline-none appearance-none hover:border-white/20 transition-colors cursor-pointer"
+                                >
+                                    {themes.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </div>
                             </div>
-                        </div>
+                        </Tooltip>
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">Brand Persona</label>
-                        <input 
-                            type="text" 
-                            value={persona} 
-                            onChange={(e) => setPersona(e.target.value)}
-                            className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-white rounded-xl p-3.5 text-[11px] font-medium outline-none focus:border-white/40 transition-all placeholder:text-[var(--text-muted)]/50"
-                            placeholder="e.g. Sophisticated professional..."
-                        />
+                        <Tooltip text="Describe the personality being portrayed" className="w-full">
+                            <input 
+                                type="text" 
+                                value={persona} 
+                                onChange={(e) => setPersona(e.target.value)}
+                                className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-white rounded-xl p-3.5 text-[11px] font-medium outline-none focus:border-white/40 transition-all placeholder:text-[var(--text-muted)]/50"
+                                placeholder="e.g. Sophisticated professional..."
+                            />
+                        </Tooltip>
                     </div>
                 </div>
             </div>
@@ -159,20 +165,21 @@ const UGCPanel: React.FC<UGCPanelProps> = ({ currentImage, onNavigateToGenerate,
             <h4 className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[0.2em] mb-4 ml-1">Select Target Shot</h4>
             <div className="grid grid-cols-2 gap-3">
                 {shotTypes.map((shot) => (
-                    <button
-                        key={shot.id}
-                        onClick={() => handleShotClick(shot.id)}
-                        disabled={isLoading}
-                        className={`flex flex-col items-start p-4 rounded-xl border transition-all duration-300 group ${
-                            selectedShotType === shot.id 
-                            ? 'bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.15)] scale-[1.02]' 
-                            : 'bg-[var(--bg-input)] border-white/5 text-[var(--text-muted)] hover:border-white/20 hover:bg-white/[0.02]'
-                        }`}
-                    >
-                        <div className={`mb-3 ${selectedShotType === shot.id ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}>{shot.icon}</div>
-                        <span className="text-[10px] font-black uppercase tracking-widest leading-tight">{shot.label}</span>
-                        <span className={`text-[9px] mt-1 leading-tight ${selectedShotType === shot.id ? 'opacity-70' : 'opacity-40'}`}>{shot.desc}</span>
-                    </button>
+                    <Tooltip key={shot.id} text={shot.desc}>
+                        <button
+                            onClick={() => handleShotClick(shot.id)}
+                            disabled={isLoading}
+                            className={`w-full flex flex-col items-start p-4 rounded-xl border transition-all duration-300 group ${
+                                selectedShotType === shot.id 
+                                ? 'bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.15)] scale-[1.02]' 
+                                : 'bg-[var(--bg-input)] border-white/5 text-[var(--text-muted)] hover:border-white/20 hover:bg-white/[0.02]'
+                            }`}
+                        >
+                            <div className={`mb-3 ${selectedShotType === shot.id ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}>{shot.icon}</div>
+                            <span className="text-[10px] font-black uppercase tracking-widest leading-tight">{shot.label}</span>
+                            <span className={`text-[9px] mt-1 leading-tight ${selectedShotType === shot.id ? 'opacity-70' : 'opacity-40'}`}>{shot.desc}</span>
+                        </button>
+                    </Tooltip>
                 ))}
             </div>
             {error && <p className="text-red-400 text-[10px] mt-4 font-black uppercase text-center bg-red-500/10 p-3 rounded-lg border border-red-500/20">{error}</p>}
@@ -186,7 +193,9 @@ const UGCPanel: React.FC<UGCPanelProps> = ({ currentImage, onNavigateToGenerate,
                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
                              <h4 className="text-[10px] font-black text-white uppercase tracking-widest">Production Brief</h4>
                         </div>
-                        <button onClick={() => onNavigateToGenerate(generatedBrief.imagePrompt)} className="bg-white text-black text-[9px] font-black uppercase px-4 py-2 rounded-lg hover:scale-105 transition-transform shadow-lg">Generate Asset</button>
+                        <Tooltip text="Transfer this logic to the synthesis engine">
+                            <button onClick={() => onNavigateToGenerate(generatedBrief.imagePrompt)} className="bg-white text-black text-[9px] font-black uppercase px-4 py-2 rounded-lg hover:scale-105 transition-transform shadow-lg">Generate Asset</button>
+                        </Tooltip>
                     </div>
                     
                     <div className="p-6 space-y-6">
@@ -199,17 +208,21 @@ const UGCPanel: React.FC<UGCPanelProps> = ({ currentImage, onNavigateToGenerate,
                         
                         <div className="space-y-2">
                             <label className="text-[9px] font-black text-[var(--accent-color)] uppercase tracking-widest">Visual Logic (AI Prompt)</label>
-                            <div className="bg-[var(--bg-input)] p-4 rounded-xl border border-white/5 text-[10px] font-mono leading-relaxed text-white/80 select-all hover:bg-white/[0.02] transition-colors cursor-text">
-                                {generatedBrief.imagePrompt}
-                            </div>
+                            <Tooltip text="Click to select all logic text">
+                                <div className="bg-[var(--bg-input)] p-4 rounded-xl border border-white/5 text-[10px] font-mono leading-relaxed text-white/80 select-all hover:bg-white/[0.02] transition-colors cursor-text">
+                                    {generatedBrief.imagePrompt}
+                                </div>
+                            </Tooltip>
                         </div>
 
                         {generatedBrief.videoPrompt && (
                              <div className="space-y-2">
                                 <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest">Motion Logic (Veo Prompt)</label>
-                                <div className="bg-[var(--bg-input)] p-4 rounded-xl border border-purple-500/20 text-[10px] font-mono leading-relaxed text-purple-100/90 select-all">
-                                    {generatedBrief.videoPrompt}
-                                </div>
+                                <Tooltip text="Optimized for cinematic synthesis">
+                                    <div className="bg-[var(--bg-input)] p-4 rounded-xl border border-purple-500/20 text-[10px] font-mono leading-relaxed text-purple-100/90 select-all">
+                                        {generatedBrief.videoPrompt}
+                                    </div>
+                                </Tooltip>
                             </div>
                         )}
 

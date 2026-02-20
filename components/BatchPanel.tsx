@@ -95,13 +95,15 @@ const BatchPanel: React.FC<BatchPanelProps> = ({
              </div>
              
              <input type="file" multiple accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
-             <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="px-8 py-4 rounded-2xl bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black text-[11px] tracking-widest uppercase hover:opacity-90 transition-studio flex items-center gap-3 shadow-lg active:scale-95"
-             >
-                <UploadIcon className="w-4 h-4" />
-                Add Source Assets
-             </button>
+             <Tooltip text="Select multiple images from local archive">
+                <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-8 py-4 rounded-2xl bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black text-[11px] tracking-widest uppercase hover:opacity-90 transition-studio flex items-center gap-3 shadow-lg active:scale-95"
+                >
+                    <UploadIcon className="w-4 h-4" />
+                    Add Source Assets
+                </button>
+             </Tooltip>
         </div>
 
         {/* Prompt Input */}
@@ -109,36 +111,42 @@ const BatchPanel: React.FC<BatchPanelProps> = ({
             <div className="space-y-2">
                 <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">Unified Prompt</label>
                 <div className="flex gap-3">
-                    <input 
-                        type="text" 
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="e.g. 'Apply cinematic lighting...'"
-                        className="flex-grow bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] rounded-xl p-4 text-[11px] font-medium focus:border-[var(--text-main)] transition-studio outline-none"
-                        disabled={isProcessing}
-                    />
+                    <Tooltip text="Aesthetic description for the batch" className="flex-grow">
+                        <input 
+                            type="text" 
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder="e.g. 'Apply cinematic lighting...'"
+                            className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] rounded-xl p-4 text-[11px] font-medium focus:border-[var(--text-main)] transition-studio outline-none"
+                            disabled={isProcessing}
+                        />
+                    </Tooltip>
                 </div>
             </div>
-            <button
-                onClick={handleProcess}
-                disabled={isProcessing || !prompt?.trim() || selectedIds.size === 0}
-                className="w-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black py-4 px-6 rounded-xl transition-studio text-[11px] uppercase tracking-widest disabled:opacity-20 flex items-center justify-center gap-3 shadow-md"
-            >
-                {isProcessing ? 'SYNTHESIZING...' : <><MagicWandIcon className="w-4 h-4" /> RUN BATCH SEQUENCE</>}
-            </button>
+            <Tooltip text="Begin parallel synthesis for all selected assets">
+                <button
+                    onClick={handleProcess}
+                    disabled={isProcessing || !prompt?.trim() || selectedIds.size === 0}
+                    className="w-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-black py-4 px-6 rounded-xl transition-studio text-[11px] uppercase tracking-widest disabled:opacity-20 flex items-center justify-center gap-3 shadow-md"
+                >
+                    {isProcessing ? 'SYNTHESIZING...' : <><MagicWandIcon className="w-4 h-4" /> RUN BATCH SEQUENCE</>}
+                </button>
+            </Tooltip>
         </div>
 
         {/* Queue List */}
         <div className="flex-grow flex flex-col bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-[2rem] overflow-hidden">
             <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-input)]/50">
                 <div className="flex items-center gap-3">
-                    <input 
-                        type="checkbox" 
-                        checked={queue.length > 0 && selectedIds.size === queue.length}
-                        onChange={toggleSelectAll}
-                        disabled={queue.length === 0}
-                        className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-input)] text-[var(--text-main)] focus:ring-[var(--text-main)] cursor-pointer"
-                    />
+                    <Tooltip text="Toggle selection for all queue items">
+                        <input 
+                            type="checkbox" 
+                            checked={queue.length > 0 && selectedIds.size === queue.length}
+                            onChange={toggleSelectAll}
+                            disabled={queue.length === 0}
+                            className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-input)] text-[var(--text-main)] focus:ring-[var(--text-main)] cursor-pointer"
+                        />
+                    </Tooltip>
                     <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)]">
                         Asset Queue ({queue.length})
                     </span>
@@ -157,12 +165,14 @@ const BatchPanel: React.FC<BatchPanelProps> = ({
                 ) : (
                     queue.map((item) => (
                         <div key={item.id} className={`flex items-center gap-4 p-3 rounded-2xl border transition-studio ${selectedIds.has(item.id) ? 'bg-[var(--bg-input)] border-[var(--border-color)]' : 'bg-transparent border-transparent hover:bg-[var(--bg-input)]/50'}`}>
-                            <input 
-                                type="checkbox" 
-                                checked={selectedIds.has(item.id)}
-                                onChange={() => toggleSelection(item.id)}
-                                className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-input)] text-[var(--text-main)] focus:ring-[var(--text-main)]"
-                            />
+                            <Tooltip text="Select for processing">
+                                <input 
+                                    type="checkbox" 
+                                    checked={selectedIds.has(item.id)}
+                                    onChange={() => toggleSelection(item.id)}
+                                    className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-input)] text-[var(--text-main)] focus:ring-[var(--text-main)]"
+                                />
+                            </Tooltip>
                             
                             <div className="w-12 h-12 rounded-xl bg-[var(--bg-input)] overflow-hidden flex-shrink-0 border border-[var(--border-color)]">
                                 {item.resultUrl ? (
@@ -182,13 +192,17 @@ const BatchPanel: React.FC<BatchPanelProps> = ({
 
                             <div className="flex items-center gap-1">
                                 {item.resultUrl && (
-                                    <a href={item.resultUrl} download={`batch-${item.file.name}`} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-studio">
-                                        <UploadIcon className="w-4 h-4 rotate-180" />
-                                    </a>
+                                    <Tooltip text="Download processed asset">
+                                        <a href={item.resultUrl} download={`batch-${item.file.name}`} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-studio">
+                                            <UploadIcon className="w-4 h-4 rotate-180" />
+                                        </a>
+                                    </Tooltip>
                                 )}
-                                <button onClick={() => onRemoveFromQueue(item.id)} className="p-2 text-[var(--text-muted)] hover:text-red-500 transition-studio">
-                                    <TrashIcon className="w-4 h-4" />
-                                </button>
+                                <Tooltip text="Remove from queue">
+                                    <button onClick={() => onRemoveFromQueue(item.id)} className="p-2 text-[var(--text-muted)] hover:text-red-500 transition-studio">
+                                        <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                </Tooltip>
                             </div>
                         </div>
                     ))

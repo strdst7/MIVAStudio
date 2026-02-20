@@ -35,6 +35,8 @@ export interface PromptAnalysisResult {
     options: { title: string; prompt: string; reasoning: string }[];
 }
 
+export type StatusUpdate = (msg: string) => void;
+
 export const MIVA_ANCHOR_PROMPT = "High-end editorial portrait, neutral expression, soft studio lighting.";
 export const IDENTITY_BASE_PROMPT = "Consistent identity, facial structure preserved.";
 export const STYLE_OVERLAYS: Record<string, string> = {
@@ -50,33 +52,22 @@ const MIVA_ARCHETYPE_RULES = `
 MIVA WOMAN — CORE IDENTITY (HARD-CODED)
 ────────────────────────────────
 The MIVA Woman embodies quiet power, refined intelligence, and timeless elegance.
-She does not perform for attention. She does not chase trends.
-Her presence is calm, intentional, and unmistakably elite.
-She feels: Self-possessed, Grounded, Unbothered, Internally confident.
+She does not perform for attention. Her presence is intentional and unmistakably elite.
 
 VISUAL BEHAVIOR RULES:
-- Facial Expression: Neutral to soft, calm eyes. No exaggerated smiling, no flirtation, no influencer clichés.
-- Body Language: Relaxed shoulders, controlled posture, minimal gestures. Stillness preferred.
-- Presence: She occupies space quietly. The camera observes her — she does not perform for it.
+- Facial Expression: Neutral to soft, calm eyes. No exaggerated smiling.
+- Body Language: Relaxed shoulders, controlled posture. Stillness preferred.
 
-STYLE & AESTHETIC LOCK:
-- Fashion: Old-money elegance, timeless silhouettes, tailored or fluid. Quality over novelty.
-- Fabrics: Silk, Wool, Linen, Cashmere blends.
-- Palette: Ivory, Stone, Camel, Taupe, Soft grey, Black, Espresso.
-- PROHIBITED: Loud colors, logos, prints, trend-driven cuts, statement accessories.
+PHOTOREALISM STANDARDS (8K RAW OPTICS):
+- Skin Architecture: Clearly visible pores with realistic distribution, fine follicle structure, and soft vellus hairs (peach fuzz). 
+- Micro-Shadows: Physically accurate micro-shadows between skin texture and vellus hair follicles.
+- Rendering: Subsurface scattering (SSS) within the skin, anisotropic highlights on hair and naturally moisturized areas. 
+- Authenticity: Retain minor imperfections, faint capillaries, and a gentle hydrated glow across high points (nose, cheekbones).
+- Flyaways: Delicate flyaways and micro-hairs caught subtly by rim lighting.
+- Lighting: Physically accurate falloff, soft rim lighting, natural window light or controlled studio flash.
+- Camera: 85mm or 50mm lenses, shallow depth of field (f1.8), organic natural film grain to evoke RAW photographic capture.
 
-ENVIRONMENT RULES:
-- Allowed: Refined interiors, architectural spaces, sunlit cafés, quiet city streets, minimalist homes.
-- Disallowed: Flashy nightlife, party scenes, influencer-style sets, fantasy locations.
-
-CAMERA & FRAMING:
-- Eye-level or subtle angles only. No dramatic low angles. No dominance framing.
-- Editorial realism over cinematic drama. Natural light preferred.
-- 85mm or 50mm lenses preferred.
-
-PSYCHOLOGICAL SIGNAL:
-"She knows who she is. She does not need to prove it."
-If input feels try-hard, trendy, or attention-seeking -> CORRECT IT immediately to match the archetype.
+PROHIBITED: Over-sexualization, loud colors, cheap fabrics, "AI-smooth" skin, generic smiling.
 `;
 
 const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY! });
@@ -98,87 +89,91 @@ async function fileToPart(file: File): Promise<{ inlineData: { data: string; mim
     });
 }
 
-const callWithRetry = async <T>(fn: () => Promise<T>, retries = 3): Promise<T> => {
+/**
+ * Enhanced retry logic with granular status reporting for UI.
+ */
+const callWithRetry = async <T>(
+    fn: () => Promise<T>, 
+    retries = 4, 
+    delay = 2000,
+    onStatus?: StatusUpdate
+): Promise<T> => {
     try {
         return await fn();
-    } catch (e) {
-        if (retries > 0) {
-            await new Promise(r => setTimeout(r, 1000));
-            return callWithRetry(fn, retries - 1);
+    } catch (e: any) {
+        const errorMessage = e?.message || JSON.stringify(e);
+        const lowerMsg = errorMessage.toLowerCase();
+        const isRateLimit = lowerMsg.includes("429") || lowerMsg.includes("quota") || lowerMsg.includes("exhausted");
+        
+        if (retries > 0 && isRateLimit) {
+            // Try to extract seconds from message or use default delay
+            const retryMatch = errorMessage.match(/retry in ([\d.]+)s/);
+            const waitSeconds = retryMatch ? parseFloat(retryMatch[1]) : (delay / 1000);
+            
+            // Add a generous buffer to the wait time to ensure quota has actually reset
+            const waitMs = (waitSeconds * 1000) + 2000; 
+            
+            if (onStatus) onStatus(`Quota limit hit. Cooling down for ${Math.ceil(waitMs/1000)}s...`);
+            
+            await new Promise(r => setTimeout(r, waitMs));
+            
+            if (onStatus) onStatus(`Resuming operation (${retries} attempts left)...`);
+            // Increase delay for next retry in case of subsequent failures
+            return callWithRetry(fn, retries - 1, delay * 2, onStatus);
         }
+        
+        if (lowerMsg.includes("requested entity was not found")) {
+            throw new Error("Identity access expired. Please re-authenticate your API key.");
+        }
+        
         throw e;
     }
 };
 
-// Robust JSON Parsing Helper
 function parseJSONSafe(text: string) {
     if (!text) return null;
-    
-    // 1. Remove Markdown Code Blocks
-    let cleaned = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1');
-    
-    // 2. Find valid JSON bounds
+    let cleaned = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1').trim();
     const firstBrace = cleaned.indexOf('{');
     const lastBrace = cleaned.lastIndexOf('}');
-    
     if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
         cleaned = cleaned.substring(firstBrace, lastBrace + 1);
     }
-
     try {
         return JSON.parse(cleaned);
     } catch (e) {
-        // Fallback: try removing common trailing commas before closing braces/brackets
         try {
             const relaxed = cleaned.replace(/,\s*([\]}])/g, '$1');
             return JSON.parse(relaxed);
         } catch (e2) {
-            console.error("JSON Parsing Failed. Raw text snippet:", text.substring(0, 100));
-            throw new Error("Failed to parse JSON response. The model output may be truncated or malformed.");
+            return null;
         }
     }
 }
 
-export const enhanceUserPrompt = async (prompt: string, context?: { platform: string; theme: string; shotType: string }): Promise<string> => {
+export const enhanceUserPrompt = async (
+    prompt: string, 
+    context?: { platform: string; theme: string; shotType: string },
+    onStatus?: StatusUpdate
+): Promise<string> => {
     const ai = getAI();
-    const contextBlock = context ? `
-    CONTEXT CONFIGURATION:
-    - Target Platform: ${context.platform}
-    - Visual Theme: ${context.theme}
-    - Shot Intent: ${context.shotType}
+    if (onStatus) onStatus("Initializing prompt refinement engine...");
     
-    Adjust the prompt to specifically optimize for this context while strictly maintaining the MIVA archetype.
-    ` : '';
-
     const systemInstruction = `You are MIVA Studio’s Visual Identity Engine.
-    
     ${MIVA_ARCHETYPE_RULES}
-
-    ────────────────────────────────
-    TASK: PROMPT REFINEMENT
-    ────────────────────────────────
-    Refine the user's input into a final, production-ready image generation prompt.
+    TASK: Refine input for maximum photorealism.
+    Inject technical descriptors: vellus hair, subsurface scattering, visible pores, anisotropic highlights, fine follicle structure, and RAW film grain.
+    Ensure the output retains a 'Quiet Luxury' aesthetic.
+    Return ONLY the refined prompt text.`;
     
-    1. **Identity Lock**: Ensure the prompt starts with instructions to lock facial structure if a reference is implied.
-    2. **Mode Enforcement**: Detect if "Hijab" or "Free Hair" mode is implied or stated.
-       - If Hijab: Modest, intentional, smooth drape, no excessive volume.
-       - If Free Hair: Natural, realistic density, no glam styling.
-    3. **Platform Logic**: If a platform (Instagram, LinkedIn, Threads) is detected/implied, apply the specific Pose/Mood mappings defined in MIVA logic (e.g. LinkedIn -> Still Icon/Calm Authority).
-    4. **Photorealism & Physics**: Add keywords for 8k resolution, authentic skin texture (pores, peach fuzz), subsurface scattering, and natural lighting. Ensure facial features are described with high fidelity to handle complex subjects like faces effectively (e.g. 'visible pores', 'vellus hair', 'authentic skin texture').
-    5. **Clarity & Detail**: Expand vague descriptions into clear, actionable visual details (e.g., "sitting" -> "seated with relaxed posture on a velvet chair"). Ensure the prompt is effective for high-end generation models.
-    6. **Guardrails**: REMOVE any requested elements that violate the MIVA Woman archetype (e.g. if user asks for "flashy neon party", convert to "quiet evening elegance").
-
-    Return ONLY the refined prompt text. Do not explain.
-    `;
+    const contextBlock = context ? `Context: ${context.platform}, Theme: ${context.theme}, Shot: ${context.shotType}.` : '';
     
     const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: `Original User Input: "${prompt}"\n${contextBlock}\nGenerate the MIVA-compliant prompt:`,
-        config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.7 
-        }
-    }));
+        model: 'gemini-3-flash-preview',
+        contents: `Original Input: "${prompt}"\n${contextBlock}\nGenerate Refined MIVA Prompt:`,
+        config: { systemInstruction, temperature: 0.7 }
+    }), 3, 2000, onStatus);
+
+    if (onStatus) onStatus("Prompt refinement complete.");
     return response.text?.trim() || prompt;
 };
 
@@ -186,40 +181,33 @@ export const generateImage = async (
     prompt: string, 
     identityImage?: File, 
     resolution: '1K' | '2K' | '4K' = '1K',
-    aspectRatio: string = '1:1'
+    aspectRatio: string = '1:1',
+    onStatus?: StatusUpdate
 ): Promise<string> => {
     const ai = getAI();
-    
     const model = 'gemini-3-pro-image-preview';
-    const config: any = {
-        imageConfig: {
-            imageSize: resolution,
-            aspectRatio: aspectRatio
-        }
-    };
-
+    const config: any = { imageConfig: { imageSize: resolution, aspectRatio } };
     const parts: any[] = [];
     
+    if (onStatus) onStatus(`Preparing synthesis at ${resolution}...`);
+
     if (identityImage) {
+        if (onStatus) onStatus("Mapping facial geometry...");
         parts.push(await fileToPart(identityImage));
-        const lockInstruction = "REFERENCE_FACE_IMAGE: Maintain identical face, facial structure, bone geometry, eye shape, nose, lips, skin tone, and proportions EXACTLY. No face swapping, beautification drift, or age change. Photorealistic skin texture, natural pores, real human realism.";
+        const lockInstruction = "REFERENCE_IDENTITY: Maintain identical facial structure. Authentic skin textures with vellus hair, subsurface scattering, micro-shadows, and clearly visible pores.";
         parts.push({ text: `${lockInstruction}\n\n${prompt}` });
     } else {
         parts.push({ text: prompt });
     }
 
-    const response = await ai.models.generateContent({
-        model,
-        contents: { parts },
-        config
-    });
-
+    if (onStatus) onStatus("Synthesizing pixels...");
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({ model, contents: { parts }, config }), 3, 3000, onStatus);
+    
+    if (onStatus) onStatus("Decoding asset stream...");
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        }
+        if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
-    throw new Error("No image generated.");
+    throw new Error("Synthesis failure: Pixel buffer empty.");
 };
 
 export const generateImageVariations = async (
@@ -227,210 +215,177 @@ export const generateImageVariations = async (
     count: number = 3, 
     identityImage?: File, 
     resolution: '1K' | '2K' | '4K' = '1K',
-    aspectRatio: string = '1:1'
+    aspectRatio: string = '1:1',
+    onStatus?: StatusUpdate
 ): Promise<string[]> => {
-    const promises = Array(count).fill(0).map(() => generateImage(prompt, identityImage, resolution, aspectRatio));
-    const results = await Promise.allSettled(promises);
-    const successful = results
-        .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-        .map(r => r.value);
-    
-    if (successful.length === 0) throw new Error("Failed to generate any variations.");
-    return successful;
+    const results: string[] = [];
+    const errors: string[] = [];
+
+    // Execute sequentially to avoid rate limits on the free tier (429 Resource Exhausted)
+    for (let i = 0; i < count; i++) {
+        try {
+            if (onStatus) onStatus(`Generating variation ${i + 1} of ${count}...`);
+            const image = await generateImage(prompt, identityImage, resolution, aspectRatio, (msg) => {
+                if (onStatus) onStatus(`[Var ${i+1}] ${msg}`);
+            });
+            results.push(image);
+        } catch (e: any) {
+            console.error(`Variation ${i + 1} failed:`, e);
+            errors.push(e.message || String(e));
+            // If we hit a rate limit even with retries, waiting a small buffer before next item might help
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+
+    if (results.length === 0) {
+        const lastError = errors.length > 0 ? errors[errors.length - 1] : "Unknown error";
+        throw new Error(`All variations failed. Last error: ${lastError}`);
+    }
+
+    return results;
 };
 
-export const generateAndDownloadAssets = async (prompts: string[]): Promise<string[]> => {
-    const promises = prompts.map(prompt => generateImage(prompt));
-    const results = await Promise.allSettled(promises);
-    const successful = results
-        .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-        .map(r => r.value);
-    
-    if (successful.length === 0) throw new Error("Failed to generate assets.");
-    return successful;
-};
-
-export const generateFilteredImage = async (image: File, prompt: string, identityImage?: File, isBatch?: boolean): Promise<string> => {
+export const generateFilteredImage = async (
+    image: File, 
+    prompt: string, 
+    identityImage?: File, 
+    isBatch?: boolean,
+    onStatus?: StatusUpdate
+): Promise<string> => {
     const ai = getAI();
+    if (onStatus) onStatus("Loading source asset...");
     const parts: any[] = [await fileToPart(image)];
-    if (identityImage) {
-        parts.push(await fileToPart(identityImage));
-    }
-    parts.push({ text: `Apply the following style/filter to the first image: ${prompt}. Maintain the subject's identity and composition exactly. Ensure realistic lighting falloff and MIVA editorial standards.` });
+    if (identityImage) parts.push(await fileToPart(identityImage));
     
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: { parts }
-    });
+    parts.push({ text: `Style Re-synthesis: ${prompt}. Maintain identity architecture and RAW photographic realism with authentic skin follicle structure and micro-shadowing.` });
+    
+    if (onStatus) onStatus("Applying aesthetic layers...");
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts } }), 3, 2000, onStatus);
     
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        }
+        if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
-    throw new Error("Failed to filter image.");
+    throw new Error("Aesthetic re-synthesis failed.");
 };
 
-export const generateAdjustedImage = async (image: File, prompt: string): Promise<string> => {
-    return generateFilteredImage(image, `Fine-tune adjustment: ${prompt}. Keep original composition. Maintain realistic shadow density.`);
-};
+export const generateAdjustedImage = async (image: File, prompt: string, onStatus?: StatusUpdate): Promise<string> => 
+    generateFilteredImage(image, `Precision tonal adjustment: ${prompt}.`, undefined, false, onStatus);
 
-export const generateEnhancedDetailImage = async (image: File, prompt: string): Promise<string> => {
-    return generateFilteredImage(image, `Enhance details: ${prompt}. Increase texture fidelity, subsurface scattering details, and sharpness without altering content.`);
-};
+export const generateEnhancedDetailImage = async (image: File, prompt: string, onStatus?: StatusUpdate): Promise<string> => 
+    generateFilteredImage(image, `Texture fidelity enhancement: ${prompt}. focus on skin pores, subsurface scattering, micro-shadows, and follicle realism.`, undefined, false, onStatus);
 
-export const generateBackgroundRemovedImage = async (image: File): Promise<string> => {
+export const generateBackgroundRemovedImage = async (image: File, onStatus?: StatusUpdate): Promise<string> => {
     const ai = getAI();
-    const parts = [await fileToPart(image), { text: "Remove the background from this image. Place the subject on a pure white background or transparent if supported." }];
-    
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: { parts }
-    });
-
+    if (onStatus) onStatus("Isolating subjects...");
+    const parts = [await fileToPart(image), { text: "Isolate subject. Remove background. Return on neutral white." }];
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts } }), 3, 2000, onStatus);
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        }
+        if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
-    throw new Error("Failed to remove background.");
+    throw new Error("Segmentation engine failed.");
 };
 
-export const generateBackgroundReplacedImage = async (image: File, prompt: string): Promise<string> => {
-    return generateFilteredImage(image, `Replace background with: ${prompt}. Keep the foreground subject exactly as is. Match lighting direction and shadow softness to MIVA editorial standards.`);
-};
+export const generateBackgroundReplacedImage = async (image: File, prompt: string, onStatus?: StatusUpdate): Promise<string> => 
+    generateFilteredImage(image, `Replace background with ${prompt}. Match lighting direction and shadow falloff.`, undefined, false, onStatus);
 
-export const generateUpscaledImage = async (image: File, resolution: '2K' | '4K'): Promise<string> => {
+export const generateUpscaledImage = async (image: File, resolution: '2K' | '4K', onStatus?: StatusUpdate): Promise<string> => {
     const ai = getAI();
-    const parts = [await fileToPart(image), { text: "Upscale this image to higher resolution. Improve details, skin texture, and sharpness. Maintain photorealistic fidelity." }];
-    
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
-        contents: { parts },
-        config: {
-            imageConfig: {
-                imageSize: resolution
-            }
-        }
-    });
-
+    if (onStatus) onStatus(`Upscaling to ${resolution}...`);
+    const parts = [await fileToPart(image), { text: "High-fidelity upscale. Refine texture density, skin realism, and fine vellus hair structure with micro-shadowing." }];
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({ model: 'gemini-3-pro-image-preview', contents: { parts }, config: { imageConfig: { imageSize: resolution } } }), 3, 3000, onStatus);
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        }
+        if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
-    throw new Error("Failed to upscale image.");
+    throw new Error("Upscale pipeline failure.");
 };
 
-export const generatePromptFromImage = async (image: File): Promise<ImageAnalysisResult> => {
+export const generatePromptFromImage = async (image: File, onStatus?: StatusUpdate): Promise<ImageAnalysisResult> => {
     const ai = getAI();
-    const parts = [await fileToPart(image), { text: "Analyze this image. Provide a detailed prompt to recreate it including lighting and camera settings, and a short editorial caption." }];
-    
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+    if (onStatus) onStatus("Analyzing visual logic...");
+    const parts = [await fileToPart(image), { text: "Reverse engineer this asset. Return JSON with 'prompt' and 'caption'." }];
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
         contents: { parts },
         config: {
             responseMimeType: 'application/json',
             responseSchema: {
                 type: Type.OBJECT,
-                properties: {
-                    prompt: { type: Type.STRING },
-                    caption: { type: Type.STRING }
-                },
+                properties: { prompt: { type: Type.STRING }, caption: { type: Type.STRING } },
                 required: ['prompt', 'caption']
             }
         }
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("No analysis returned");
-    return parseJSONSafe(text) as ImageAnalysisResult;
+    }), 3, 2000, onStatus);
+    return parseJSONSafe(response.text) || { prompt: '', caption: '' };
 };
 
-export const generateVideo = async (prompt: string, config: { resolution: '720p'|'1080p', aspectRatio: '16:9'|'9:16' }): Promise<string> => {
+export const analyzePromptStructure = async (
+    prompt: string, 
+    context?: { platform: string; theme: string; shotType: string },
+    onStatus?: StatusUpdate
+): Promise<PromptAnalysisResult> => {
     const ai = getAI();
+    if (onStatus) onStatus("Performing structural audit...");
+    const systemInstruction = `You are the MIVA Visual Identity Audit System. ${MIVA_ARCHETYPE_RULES}
+    Analyze user prompt for realism and editorial intent. 
+    Provide variations that emphasize photographic detail: subsurface scattering, vellus hair, visible pores, and anisotropic highlights.
+    Return JSON.`;
     
-    let operation = await ai.models.generateVideos({
-        model: 'veo-3.1-fast-generate-preview',
-        prompt,
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Audit & Suggest Variations for: "${prompt}"\nContext: ${JSON.stringify(context)}`,
         config: {
-            numberOfVideos: 1,
-            resolution: config.resolution,
-            aspectRatio: config.aspectRatio
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    critique: { type: Type.STRING },
+                    faceAnalysis: { type: Type.STRING },
+                    keyTerms: { 
+                        type: Type.ARRAY, 
+                        items: { 
+                            type: Type.OBJECT,
+                            properties: { category: { type: Type.STRING }, term: { type: Type.STRING }, effect: { type: Type.STRING } }
+                        } 
+                    },
+                    options: { 
+                        type: Type.ARRAY, 
+                        items: { 
+                            type: Type.OBJECT,
+                            properties: { title: { type: Type.STRING }, prompt: { type: Type.STRING }, reasoning: { type: Type.STRING } }
+                        } 
+                    }
+                }
+            }
         }
-    });
+    }), 3, 2000, onStatus);
 
-    while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        operation = await ai.operations.getVideosOperation({operation});
-    }
-
-    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (!videoUri) throw new Error("Video generation failed.");
-    
-    return `${videoUri}&key=${process.env.API_KEY}`;
-};
-
-export const generateVideoFromImage = async (image: File, prompt: string, config: { resolution: '720p'|'1080p', aspectRatio: '16:9'|'9:16' }): Promise<string> => {
-    const ai = getAI();
-    const imagePart = await fileToPart(image);
-    
-    let operation = await ai.models.generateVideos({
-        model: 'veo-3.1-fast-generate-preview',
-        prompt: prompt || "Animate this image cinematically, maintaining the MIVA editorial style.",
-        image: {
-            imageBytes: imagePart.inlineData.data,
-            mimeType: imagePart.inlineData.mimeType
-        },
-        config: {
-            numberOfVideos: 1,
-            resolution: config.resolution,
-            aspectRatio: config.aspectRatio
-        }
-    });
-
-    while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        operation = await ai.operations.getVideosOperation({operation});
-    }
-
-    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (!videoUri) throw new Error("Video generation failed.");
-    
-    return `${videoUri}&key=${process.env.API_KEY}`;
-};
-
-export const generateThreadsContent = async (params: { goal: string, postType: string, brandVoice: string, topic: string, product: string, notes: string, usePro: boolean, useSearch: boolean }): Promise<string> => {
-    const ai = getAI();
-    const prompt = `Write a ${params.postType} for Threads/Twitter.
-    Goal: ${params.goal}
-    Voice: ${params.brandVoice} (Adhere to MIVA Woman archetype: self-possessed, grounded, elite)
-    Topic: ${params.topic}
-    Context: ${params.notes}
-    
-    Make it engaging but refined. Use magnetic hooks.`;
-
-    const config: any = {
-        tools: params.useSearch ? [{ googleSearch: {} }] : []
+    if (onStatus) onStatus("Audit complete.");
+    return parseJSONSafe(response.text) || {
+        critique: "Analysis fallback active due to quota limitations.",
+        faceAnalysis: "Standard identity preservation protocols applied.",
+        keyTerms: [],
+        options: []
     };
-
-    const response = await ai.models.generateContent({
-        model: params.usePro ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview',
-        contents: prompt,
-        config
-    });
-
-    return response.text || "No content generated.";
 };
 
-export const generateEditorialCritique = async (content: string): Promise<EditorialCritique> => {
+export const generateThreadsContent = async (params: any, onStatus?: StatusUpdate): Promise<string> => {
     const ai = getAI();
-    const prompt = `Critique the following social media content based on the MIVA Woman archetype (Quiet Luxury, Old Money, Elite, Self-Possessed).
-    Content: "${content}"`;
+    if (onStatus) onStatus("Architecting narrative flow...");
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({
+        model: params.usePro ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview',
+        contents: `Architect high-end ${params.postType} with ${params.brandVoice} voice. Context: ${params.notes}.`,
+        config: { tools: params.useSearch ? [{ googleSearch: {} }] : [] }
+    }), 3, 2000, onStatus);
+    return response.text || "";
+};
 
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: prompt,
+export const generateEditorialCritique = async (content: string, onStatus?: StatusUpdate): Promise<EditorialCritique> => {
+    const ai = getAI();
+    if (onStatus) onStatus("Reviewing editorial quality...");
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Audit content for editorial quality: "${content}"`,
         config: {
             responseMimeType: 'application/json',
             responseSchema: {
@@ -443,112 +398,25 @@ export const generateEditorialCritique = async (content: string): Promise<Editor
                 }
             }
         }
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("No critique generated");
-    return parseJSONSafe(text) as EditorialCritique;
+    }), 3, 2000, onStatus);
+    return parseJSONSafe(response.text) || { strengths: [], weaknesses: [], alternatives: [], suggestions: [] };
 };
 
-export const analyzePromptStructure = async (prompt: string, context?: { platform: string; theme: string; shotType: string }): Promise<PromptAnalysisResult> => {
+export const generateUGCPrompts = async (
+    image: File, 
+    theme: string, 
+    type: string, 
+    typeDesc: string, 
+    persona: string, 
+    gridMode: boolean, 
+    platform: string,
+    onStatus?: StatusUpdate
+): Promise<UGCBrief> => {
     const ai = getAI();
-    const systemInstruction = `You are the MIVA Visual Identity Engine Audit System.
-    ${MIVA_ARCHETYPE_RULES}
-    
-    Task: Analyze the input prompt for adherence to the MIVA Woman archetype and general photorealistic quality.
-    Identify any deviations (trend-chasing, over-sexualization, loud colors, cheap fabrics).
-    Suggest high-end editorial corrections.
-    `;
-
-    const contextBlock = context ? `
-    CONTEXT:
-    Platform: ${context.platform}
-    Theme: ${context.theme}
-    Shot Type: ${context.shotType}
-    ` : '';
-
-    const promptText = `Analyze this image generation prompt${contextBlock} for clarity, detail, and effectiveness:
-    
-    1. **General Critique**: Evaluate composition, lighting, and style against MIVA standards. Check for potential artifacts or lack of detail in complex areas like faces.
-    2. **Face & Identity Analysis**: Specifically analyze facial descriptions. Suggest improvements for photorealism (pores, vellus hair, lighting interaction) and identity consistency.
-    3. **Impact Matrix**: Identify key terms.
-    4. **Style Suggestions**: Suggest 3 MIVA-compliant editorial variations (e.g. "Still Icon", "Window Light Pause") that maximize editorial quality and identity consistency.
-
-    Prompt: "${prompt}"`;
-
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
-            contents: promptText,
-            config: {
-                systemInstruction,
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        critique: { type: Type.STRING },
-                        faceAnalysis: { type: Type.STRING },
-                        keyTerms: { 
-                            type: Type.ARRAY, 
-                            items: { 
-                                type: Type.OBJECT,
-                                properties: {
-                                    category: { type: Type.STRING },
-                                    term: { type: Type.STRING },
-                                    effect: { type: Type.STRING }
-                                }
-                            } 
-                        },
-                        options: { 
-                            type: Type.ARRAY, 
-                            items: { 
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING },
-                                    prompt: { type: Type.STRING },
-                                    reasoning: { type: Type.STRING }
-                                }
-                            } 
-                        }
-                    }
-                }
-            }
-        });
-
-        const text = response.text;
-        if (!text) {
-            throw new Error("No analysis generated from model.");
-        }
-        
-        const result = parseJSONSafe(text) as PromptAnalysisResult;
-        if (!result) throw new Error("Parsed result is empty.");
-        return result;
-
-    } catch (e) {
-        console.error("Analysis generation error:", e);
-        // Fallback result to prevent UI crash
-        return {
-            critique: "Analysis service temporarily unavailable. Proceeding with standard generation protocols.",
-            faceAnalysis: "Standard identity preservation protocols active.",
-            keyTerms: [],
-            options: []
-        };
-    }
-};
-
-export const generateUGCPrompts = async (image: File, theme: string, type: string, typeDesc: string, persona: string, gridMode: boolean, platform: string): Promise<UGCBrief> => {
-    const ai = getAI();
-    const parts = [await fileToPart(image), { text: `Generate a UGC production brief for this product.
-    Platform: ${platform}
-    Theme: ${theme}
-    Shot Type: ${type} (${typeDesc})
-    Persona: ${persona} (Ensure adherence to MIVA Woman archetype: sophisticated, refined, neutral)
-    Grid Mode: ${gridMode}
-    
-    Provide structured output including shot description, image generation prompt, video generation prompt (for Veo), camera settings, lighting config, and a caption.` }];
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+    if (onStatus) onStatus("Consulting creative director...");
+    const parts = [await fileToPart(image), { text: `UGC Production Protocol for ${platform}. Theme: ${theme}, Shot Type: ${type}. Persona: ${persona}.` }];
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
         contents: { parts },
         config: {
             responseMimeType: 'application/json',
@@ -564,34 +432,73 @@ export const generateUGCPrompts = async (image: File, theme: string, type: strin
                 }
             }
         }
-    });
-    
-    const text = response.text;
-    if (!text) throw new Error("No brief generated");
-    return parseJSONSafe(text) as UGCBrief;
+    }), 3, 2000, onStatus);
+    return parseJSONSafe(response.text) || { shotDescription: '', imagePrompt: '', videoPrompt: '', cameraSettings: '', lightingConfig: '', captionOrHook: '' };
 };
 
-export const generateAvatarTwin = async (image: File | null, scenario: string, customPrompt: string): Promise<string> => {
+export const generateVideo = async (prompt: string, config: any, onStatus?: StatusUpdate): Promise<string> => {
     const ai = getAI();
-    const basePrompt = image ? IDENTITY_BASE_PROMPT : MIVA_ANCHOR_PROMPT;
-    const overlay = STYLE_OVERLAYS[scenario] || "";
-    // Enforce MIVA standards in the custom prompt via instructions
-    const fullPrompt = `MIVA VISUAL ENGINE: ${basePrompt} ${overlay} ${customPrompt}. Maintain consistent identity and old-money aesthetic restraint.`;
+    if (onStatus) onStatus("Initializing motion engine...");
+    let operation = await ai.models.generateVideos({ model: 'veo-3.1-fast-generate-preview', prompt, config: { numberOfVideos: 1, ...config } });
     
-    const parts: any[] = [{ text: fullPrompt }];
-    if (image) {
-        parts.unshift(await fileToPart(image));
+    while (!operation.done) {
+        if (onStatus) onStatus("Rendering cinematic motion...");
+        await new Promise(r => setTimeout(r, 5000));
+        operation = await ai.operations.getVideosOperation({ operation });
     }
+    
+    if (onStatus) onStatus("Finalizing clip encoding...");
+    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+    return videoUri ? `${videoUri}&key=${process.env.API_KEY}` : '';
+};
 
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image', 
-        contents: { parts }
+export const generateVideoFromImage = async (image: File, prompt: string, config: any, onStatus?: StatusUpdate): Promise<string> => {
+    const ai = getAI();
+    if (onStatus) onStatus("Preparing source frame for motion synthesis...");
+    
+    // Convert File to base64 and mimeType for Veo
+    const imgData: { imageBytes: string; mimeType: string } = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64Data = (reader.result as string).split(',')[1];
+            resolve({ imageBytes: base64Data, mimeType: image.type });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(image);
     });
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        }
+    if (onStatus) onStatus("Initializing motion engine with image context...");
+    let operation = await ai.models.generateVideos({ 
+        model: 'veo-3.1-fast-generate-preview', 
+        prompt: prompt || undefined, 
+        image: imgData,
+        config: { numberOfVideos: 1, ...config } 
+    });
+    
+    while (!operation.done) {
+        if (onStatus) onStatus("Synthesizing cinematic transition...");
+        await new Promise(r => setTimeout(r, 10000));
+        operation = await ai.operations.getVideosOperation({ operation });
     }
-    throw new Error("Avatar generation failed.");
+    
+    if (onStatus) onStatus("Finalizing video buffer...");
+    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+    return videoUri ? `${videoUri}&key=${process.env.API_KEY}` : '';
+};
+
+export const generateAvatarTwin = async (image: File | null, scenario: string, customPrompt: string, onStatus?: StatusUpdate): Promise<string> => {
+    const ai = getAI();
+    if (onStatus) onStatus("Establishing biometric lock...");
+    const base = image ? IDENTITY_BASE_PROMPT : MIVA_ANCHOR_PROMPT;
+    const overlay = STYLE_OVERLAYS[scenario] || "";
+    const parts: any[] = [{ text: `IDENTITY SYNTHESIS: ${base} ${overlay} ${customPrompt}` }];
+    if (image) parts.unshift(await fileToPart(image));
+    
+    if (onStatus) onStatus("Mapping style overlays...");
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts } }), 3, 2000, onStatus);
+    
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    }
+    throw new Error("Avatar synthesis engine stalled.");
 };

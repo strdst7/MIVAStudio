@@ -215,7 +215,7 @@ const ActionToolbar: React.FC<ActionToolbarProps> = ({
             )}
              {onRedo && <div className="w-px h-4 bg-[var(--bg-app)] opacity-20"></div>}
 
-            <Tooltip text="Quick Download" position="top">
+            <Tooltip text="Quick Download as PNG" position="top">
                 <button 
                     onClick={() => handleDownload()}
                     className="pl-5 pr-4 py-3 text-[11px] font-black uppercase tracking-widest hover:opacity-80 transition-opacity flex items-center gap-2 focus:outline-none"
@@ -227,7 +227,7 @@ const ActionToolbar: React.FC<ActionToolbarProps> = ({
             
             <div className="w-px h-4 bg-[var(--bg-app)] opacity-20"></div>
             
-            <Tooltip text="Export Options" position="top">
+            <Tooltip text="Export configurations" position="top">
                 <button 
                     onClick={() => setShowMenu(!showMenu)}
                     className="pl-3 pr-4 py-3 hover:opacity-80 transition-opacity focus:outline-none"
@@ -241,7 +241,7 @@ const ActionToolbar: React.FC<ActionToolbarProps> = ({
             <div className="w-px h-4 bg-[var(--bg-app)] opacity-20"></div>
             
             {onToggleDetails && (
-                <Tooltip text="Asset Metadata" position="top">
+                <Tooltip text="View synthesis logic & metadata" position="top">
                     <button
                         onClick={onToggleDetails}
                         className="pl-4 pr-5 py-3 hover:opacity-80 transition-opacity focus:outline-none"

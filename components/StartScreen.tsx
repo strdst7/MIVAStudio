@@ -38,36 +38,38 @@ const StartScreen: React.FC<StartScreenProps> = ({ onFileSelect, onGenerateClick
             </div>
         </div>
 
-        {/* Central Identity Vault Card */}
-        <div 
-            onClick={onManageIdentity}
-            className={`cursor-pointer w-full max-w-md mx-auto p-1 rounded-2xl transition-all duration-500 group ${
-                identityImage 
-                ? 'bg-gradient-to-r from-emerald-500/20 via-transparent to-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)]' 
-                : 'bg-transparent border border-dashed border-[var(--border-color)] hover:border-[var(--text-muted)]'
-            }`}
-        >
-            <div className={`rounded-xl p-5 flex items-center gap-5 transition-colors ${identityImage ? 'bg-[var(--bg-panel)] border border-emerald-500/20' : 'bg-transparent'}`}>
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${identityImage ? 'bg-emerald-500/10 text-emerald-400' : 'bg-[var(--bg-input)] text-[var(--text-muted)]'}`}>
-                    {identityImage ? <ShieldCheckIcon className="w-6 h-6" /> : <LockClosedIcon className="w-6 h-6" />}
-                </div>
-                
-                <div className="text-left flex-1">
-                    <h3 className={`text-[11px] font-black uppercase tracking-widest mb-1 ${identityImage ? 'text-emerald-400' : 'text-[var(--text-main)]'}`}>
-                        {identityImage ? 'Identity Vault Secured' : 'Identity Vault Empty'}
-                    </h3>
-                    <p className="text-[10px] text-[var(--text-muted)] leading-tight">
-                        {identityImage 
-                            ? 'Biometric architecture locked. All generations will reference this core identity.' 
-                            : 'Initialize vault to ensure consistent facial structure across all studio outputs.'}
-                    </p>
-                </div>
+        {/* Central Identity Vault Card - Displays Active Lock even after Workspace Clear */}
+        <Tooltip text={identityImage ? "Vault is active and biometric lock is applied" : "Initialize vault for facial architecture consistency"}>
+            <div 
+                onClick={onManageIdentity}
+                className={`cursor-pointer w-full max-w-md mx-auto p-1 rounded-2xl transition-all duration-500 group ${
+                    identityImage 
+                    ? 'bg-gradient-to-r from-emerald-500/20 via-transparent to-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)]' 
+                    : 'bg-transparent border border-dashed border-[var(--border-color)] hover:border-[var(--text-muted)]'
+                }`}
+            >
+                <div className={`rounded-xl p-5 flex items-center gap-5 transition-colors ${identityImage ? 'bg-[var(--bg-panel)] border border-emerald-500/20' : 'bg-transparent'}`}>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${identityImage ? 'bg-emerald-500/10 text-emerald-400' : 'bg-[var(--bg-input)] text-[var(--text-muted)]'}`}>
+                        {identityImage ? <ShieldCheckIcon className="w-6 h-6" /> : <LockClosedIcon className="w-6 h-6" />}
+                    </div>
+                    
+                    <div className="text-left flex-1">
+                        <h3 className={`text-[11px] font-black uppercase tracking-widest mb-1 ${identityImage ? 'text-emerald-400' : 'text-[var(--text-main)]'}`}>
+                            {identityImage ? 'Identity Vault Active' : 'Identity Vault Empty'}
+                        </h3>
+                        <p className="text-[10px] text-[var(--text-muted)] leading-tight">
+                            {identityImage 
+                                ? 'Biometric architecture is securely locked. Generations will reference this identity.' 
+                                : 'Initialize vault to ensure consistent facial structure across all studio outputs.'}
+                        </p>
+                    </div>
 
-                <div className={`p-2 rounded-lg transition-colors ${identityImage ? 'bg-emerald-500/10 text-emerald-400' : 'bg-[var(--bg-input)] text-[var(--text-muted)] group-hover:text-[var(--text-main)]'}`}>
-                    <FingerPrintIcon className="w-5 h-5" />
+                    <div className={`p-2 rounded-lg transition-colors ${identityImage ? 'bg-emerald-500/10 text-emerald-400' : 'bg-[var(--bg-input)] text-[var(--text-muted)] group-hover:text-[var(--text-main)]'}`}>
+                        <FingerPrintIcon className="w-5 h-5" />
+                    </div>
                 </div>
             </div>
-        </div>
+        </Tooltip>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
             <Tooltip text="Create new assets from text descriptions">

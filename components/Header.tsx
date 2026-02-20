@@ -15,7 +15,8 @@ import {
     MonitorIcon, 
     PlusIcon, 
     UserIcon, 
-    LogOutIcon 
+    LogOutIcon,
+    ClockIcon
 } from './icons';
 
 interface HeaderProps {
@@ -26,6 +27,7 @@ interface HeaderProps {
     onNewProject?: () => void;
     currentViewport?: 'desktop' | 'tablet' | 'mobile';
     onViewportChange?: (view: 'desktop' | 'tablet' | 'mobile') => void;
+    systemStatus?: 'ready' | 'busy' | 'limited';
 }
 
 const Header: React.FC<HeaderProps> = ({ 
@@ -35,7 +37,8 @@ const Header: React.FC<HeaderProps> = ({
     onAccountClick,
     onNewProject,
     currentViewport = 'desktop',
-    onViewportChange
+    onViewportChange,
+    systemStatus = 'ready'
 }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -69,60 +72,79 @@ const Header: React.FC<HeaderProps> = ({
       window.location.reload();
   };
 
+  const statusColors = {
+      ready: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]',
+      busy: 'bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.4)]',
+      limited: 'bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+  };
+
   return (
     <header className="w-full h-16 px-6 flex items-center justify-between z-50 shrink-0 relative bg-[var(--bg-app)]/80 backdrop-blur-md border-b border-[var(--border-color)]">
         <div className="flex items-center gap-8">
-            <button 
-                onClick={onHomeClick}
-                className="flex items-center gap-3 group transition-studio outline-none"
-                aria-label="Studio Dashboard"
-            >
-                <div className="w-6 h-6 bg-[var(--text-main)] rounded-md flex items-center justify-center shadow-sm transition-transform group-hover:scale-95">
-                    <div className="w-2 h-2 bg-[var(--bg-app)] rounded-full"></div>
-                </div>
-                <h1 className="text-xs font-black tracking-[0.3em] text-[var(--text-main)] uppercase leading-none md:block hidden opacity-90 group-hover:opacity-100">MIVA</h1>
-            </button>
+            <Tooltip text="Return to dashboard">
+                <button 
+                    onClick={onHomeClick}
+                    className="flex items-center gap-3 group transition-studio outline-none"
+                    aria-label="Studio Dashboard"
+                >
+                    <div className="w-6 h-6 bg-[var(--text-main)] rounded-md flex items-center justify-center shadow-sm transition-transform group-hover:scale-95">
+                        <div className="w-2 h-2 bg-[var(--bg-app)] rounded-full"></div>
+                    </div>
+                    <h1 className="text-xs font-black tracking-[0.3em] text-[var(--text-main)] uppercase leading-none md:block hidden opacity-90 group-hover:opacity-100">MIVA</h1>
+                </button>
+            </Tooltip>
             
             <nav className="hidden md:flex items-center gap-1 bg-[var(--bg-input)] p-1 rounded-lg border border-[var(--border-color)]" aria-label="Main Navigation">
                 {[
-                    { id: 'workspace', label: 'Workspace', active: activeView === 'workspace' },
-                    { id: 'library', label: 'Library', active: activeView === 'library' }
+                    { id: 'workspace', label: 'Workspace', active: activeView === 'workspace', tooltip: "Design and synthesize assets" },
+                    { id: 'library', label: 'Library', active: activeView === 'library', tooltip: "Manage saved assets and collections" }
                 ].map(view => (
-                    <button 
-                        key={view.id}
-                        onClick={() => activeView !== view.id && onLibraryClick?.()}
-                        className={`text-[9px] font-bold tracking-widest uppercase transition-all px-4 py-1.5 rounded-md ${
-                            view.active 
-                            ? 'bg-[var(--bg-panel)] text-[var(--text-main)] shadow-sm' 
-                            : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-app)]/50'
-                        }`}
-                    >
-                        {view.label}
-                    </button>
+                    <Tooltip key={view.id} text={view.tooltip} position="bottom">
+                        <button 
+                            onClick={() => activeView !== view.id && onLibraryClick?.()}
+                            className={`text-[9px] font-bold tracking-widest uppercase transition-all px-4 py-1.5 rounded-md ${
+                                view.active 
+                                ? 'bg-[var(--bg-panel)] text-[var(--text-main)] shadow-sm' 
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-app)]/50'
+                            }`}
+                        >
+                            {view.label}
+                        </button>
+                    </Tooltip>
                 ))}
             </nav>
         </div>
 
         <div className="flex items-center gap-3 md:gap-4">
             
+            {/* System Engine Health */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-input)] rounded-full border border-[var(--border-color)]">
+                <div className={`w-1.5 h-1.5 rounded-full ${statusColors[systemStatus]}`}></div>
+                <span className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">
+                    {systemStatus === 'limited' ? 'Quota Cooling' : systemStatus === 'busy' ? 'Engine Active' : 'System Ready'}
+                </span>
+            </div>
+
             {/* Viewport & Utility Tools */}
             <div className="flex items-center gap-1 pr-4 border-r border-[var(--border-color)]">
                 {onNewProject && (
-                    <button 
-                        onClick={onNewProject}
-                        className="flex items-center gap-2 px-3 py-1.5 mr-2 bg-[var(--bg-input)] hover:bg-emerald-500 hover:text-white transition-colors rounded-lg border border-[var(--border-color)] hover:border-emerald-500 shadow-sm text-[9px] font-black uppercase tracking-widest text-[var(--text-main)]"
-                    >
-                        <PlusIcon className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Create New</span>
-                    </button>
+                    <Tooltip text="Clear workspace and start fresh" position="bottom">
+                        <button 
+                            onClick={onNewProject}
+                            className="flex items-center gap-2 px-3 py-1.5 mr-2 bg-[var(--bg-input)] hover:bg-emerald-500 hover:text-white transition-colors rounded-lg border border-[var(--border-color)] hover:border-emerald-500 shadow-sm text-[9px] font-black uppercase tracking-widest text-[var(--text-main)]"
+                        >
+                            <PlusIcon className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Create New</span>
+                        </button>
+                    </Tooltip>
                 )}
 
                 {activeView === 'workspace' && onViewportChange && (
                     <div className="hidden lg:flex items-center gap-1 mr-2">
                         {[
-                            { id: 'mobile', icon: <DevicePhoneIcon className="w-3.5 h-3.5" />, label: 'Mobile' },
-                            { id: 'tablet', icon: <DeviceTabletIcon className="w-3.5 h-3.5" />, label: 'Tablet' },
-                            { id: 'desktop', icon: <MonitorIcon className="w-3.5 h-3.5" />, label: 'Desktop' }
+                            { id: 'mobile', icon: <DevicePhoneIcon className="w-3.5 h-3.5" />, label: 'Mobile Simulation' },
+                            { id: 'tablet', icon: <DeviceTabletIcon className="w-3.5 h-3.5" />, label: 'Tablet Simulation' },
+                            { id: 'desktop', icon: <MonitorIcon className="w-3.5 h-3.5" />, label: 'Desktop View' }
                         ].map(mode => (
                             <Tooltip key={mode.id} text={mode.label} position="bottom">
                                 <button
@@ -136,13 +158,13 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                 )}
 
-                <Tooltip text="Reload" position="bottom">
+                <Tooltip text="Refresh application state" position="bottom">
                     <button onClick={handleReload} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors rounded-lg hover:bg-[var(--bg-input)]">
                         <RefreshIcon className="w-3.5 h-3.5" />
                     </button>
                 </Tooltip>
                 
-                <Tooltip text={isFullscreen ? "Exit Fullscreen" : "Fullscreen"} position="bottom">
+                <Tooltip text={isFullscreen ? "Exit immersive mode" : "Enter immersive mode"} position="bottom">
                     <button onClick={toggleFullscreen} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors rounded-lg hover:bg-[var(--bg-input)]">
                         {isFullscreen ? <MinimizeIcon className="w-3.5 h-3.5" /> : <MaximizeIcon className="w-3.5 h-3.5" />}
                     </button>
@@ -152,14 +174,16 @@ const Header: React.FC<HeaderProps> = ({
             <ThemeSwitcher />
             
             <div className="relative" ref={profileRef}>
-                <button 
-                    onClick={() => setIsProfileOpen(!isProfileOpen)}
-                    className={`w-8 h-8 rounded-full bg-[var(--bg-input)] border flex items-center justify-center text-[10px] font-black transition-studio shadow-sm hover:scale-105 active:scale-95 ${
-                        isProfileOpen ? 'border-[var(--text-main)] text-[var(--text-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'
-                    }`}
-                >
-                    AM
-                </button>
+                <Tooltip text="Manage profile and access" position="bottom">
+                    <button 
+                        onClick={() => setIsProfileOpen(!isProfileOpen)}
+                        className={`w-8 h-8 rounded-full bg-[var(--bg-input)] border flex items-center justify-center text-[10px] font-black transition-studio shadow-sm hover:scale-105 active:scale-95 ${
+                            isProfileOpen ? 'border-[var(--text-main)] text-[var(--text-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'
+                        }`}
+                    >
+                        AM
+                    </button>
+                </Tooltip>
 
                 {isProfileOpen && (
                     <div className="absolute right-0 top-full mt-3 w-64 bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-xl shadow-premium overflow-hidden animate-slide-up origin-top-right z-50">
@@ -174,7 +198,7 @@ const Header: React.FC<HeaderProps> = ({
                             </div>
                             <div className="flex items-center gap-2 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg w-full">
                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                                <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-wide">Obsidian Tier</span>
+                                <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-wide">Obsidian Access</span>
                             </div>
                         </div>
 
@@ -185,7 +209,7 @@ const Header: React.FC<HeaderProps> = ({
                                 className="w-full flex items-center gap-3 px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-input)] rounded-lg transition-colors group"
                             >
                                 <UserIcon className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--text-main)] transition-colors" />
-                                My Profile
+                                Account Settings
                             </button>
                             
                             <div className="h-px bg-[var(--border-color)] my-1.5 mx-2"></div>
@@ -195,13 +219,8 @@ const Header: React.FC<HeaderProps> = ({
                                 className="w-full flex items-center gap-3 px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-400/10 rounded-lg transition-colors group"
                             >
                                 <LogOutIcon className="w-3.5 h-3.5 text-red-400 group-hover:text-red-500 transition-colors" />
-                                Sign Out
+                                Terminate Session
                             </button>
-                        </div>
-                        
-                        {/* Footer */}
-                        <div className="p-2 bg-[var(--bg-input)]/30 border-t border-[var(--border-color)] text-center">
-                            <p className="text-[8px] text-[var(--text-muted)] font-mono opacity-40">MIVA Studio v2.5.0</p>
                         </div>
                     </div>
                 )}

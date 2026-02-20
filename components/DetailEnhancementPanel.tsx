@@ -26,19 +26,19 @@ const DetailEnhancementPanel: React.FC<DetailEnhancementPanelProps> = ({ onApply
   const defaultPresets: Preset[] = [
     { 
         name: 'True RAW Realism', 
-        prompt: 'Enhance the current image to achieve a heightened level of photographic realism and overall clarity. Improve image fidelity by eliminating any synthetic or generation-related artifacts while preserving the original composition and all existing details exactly as they are. Emphasize lifelike skin rendering with clearly visible pores, fine follicle structure, and soft vellus hairs, including delicate flyaways subtly caught by rim lighting. Introduce realistic light interaction such as subsurface scattering within the skin and anisotropic highlights on hair and naturally moisturized areas. Retain authentic skin characteristics, including minor imperfections and faint capillaries, with a gentle hydrated glow across high points like the nose. Finish with a subtle, natural film grain to evoke a true RAW photographic capture, enhancing realism without altering form, pose, or framing.'
+        prompt: 'Refine the image to achieve a heightened level of photographic realism and overall clarity. Improve image fidelity by eliminating any synthetic or generation-related artifacts while preserving the original composition and all existing details exactly as they are. Emphasize lifelike skin rendering with clearly visible pores, fine follicle structure, and soft vellus hairs, including delicate flyaways subtly caught by rim lighting. Introduce realistic light interaction such as subsurface scattering within the skin and anisotropic highlights on hair and naturally moisturized areas. Retain authentic skin characteristics, including minor imperfections and faint capillaries, with a gentle hydrated glow across high points like the nose. Finish with a subtle, natural film grain to evoke a true RAW photographic capture, enhancing realism without altering form, pose, or framing.'
     },
     { 
-        name: 'Skin Fidelity', 
-        prompt: 'Refine skin texture to include visible pores, natural grain, and subtle tonal variation. Add fine facial hairs (peach fuzz) along the jawline and cheeks, with micro-shadows between the texture and fuzz. Ensure realistic specular highlights on the forehead and cheekbones, and retain natural under-eye creasing.'
+        name: 'Master Refinement', 
+        prompt: 'Precision retouching of facial geometry. Refine iris patterns with wet catchlights and accurate tear duct reflections. Enhance the tactile fidelity of skin texture with visible pores and subsurface scattering. Match lighting falloff to high-end 85mm f/1.8 lens characteristics. RAW film grain finish.'
     },
     { 
         name: 'Texture Recovery', 
-        prompt: 'Recover fine textures and material fidelity. Focus on fabric weaves, metal surfaces, and organic patterns without altering geometry.'
+        prompt: 'Recover fine textures and material fidelity. Focus on fabric weaves, metal surfaces, and organic patterns without altering geometry. Add micro-contrast to surface details.'
     },
     { 
         name: 'Micro-Contrast', 
-        prompt: 'Boost micro-contrast and edge definition. Sharpen small-scale details for a high-end editorial look.'
+        prompt: 'Boost micro-contrast and edge definition. Sharpen small-scale details for a high-end editorial look while maintaining natural tonal rolloff.'
     }
   ];
 
@@ -74,7 +74,7 @@ const DetailEnhancementPanel: React.FC<DetailEnhancementPanelProps> = ({ onApply
                         onClick={() => handlePresetClick(preset)}
                         className={`text-[9px] font-black tracking-widest uppercase py-3 px-1 rounded-xl transition-studio border ${
                             selectedPresetPrompt === preset.prompt 
-                            ? 'bg-white text-black border-white' 
+                            ? 'bg-white text-black border-white shadow-premium' 
                             : 'bg-[var(--bg-input)] text-[var(--text-muted)] border-[var(--border-color)] hover:border-[var(--text-muted)]'
                         }`}
                     >
@@ -89,12 +89,12 @@ const DetailEnhancementPanel: React.FC<DetailEnhancementPanelProps> = ({ onApply
                     value={customPrompt}
                     onChange={(e) => {setCustomPrompt(e.target.value); setSelectedPresetPrompt(null);}}
                     placeholder="Specific detail refinements (e.g. 'bring out the fine grain of the leather', 'sharpen eye reflections')..."
-                    className="w-full h-24 bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] rounded-2xl p-4 text-[11px] font-medium focus:border-white transition-studio outline-none resize-none"
+                    className="w-full h-24 bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] rounded-2xl p-4 text-[11px] font-medium focus:border-white transition-studio outline-none resize-none placeholder:text-[var(--text-muted)]/30"
                     disabled={isLoading}
                 />
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
                 <button
                     onClick={handleApply}
                     disabled={isLoading || !activePrompt}
@@ -107,7 +107,7 @@ const DetailEnhancementPanel: React.FC<DetailEnhancementPanelProps> = ({ onApply
                     <button
                         onClick={handleClone}
                         disabled={isLoading || !activePrompt}
-                        className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] hover:border-[var(--text-muted)] text-white font-black py-4 px-6 rounded-2xl transition-studio text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 disabled:opacity-20"
+                        className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] hover:border-[var(--text-muted)] text-[var(--text-main)] font-black py-4 px-6 rounded-2xl transition-studio text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 disabled:opacity-20"
                     >
                         <StackIcon className="w-4 h-4" />
                         Clone Logic to Batch
