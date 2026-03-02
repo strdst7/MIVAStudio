@@ -124,6 +124,14 @@ body {
     animation: slide-in-right 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
+@keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+}
+.animate-scanline {
+    animation: scanline 3s linear infinite;
+}
+
 /* UI Helpers */
 .glass-morphism {
     background: var(--glass-bg);
