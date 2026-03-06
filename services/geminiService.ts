@@ -185,7 +185,7 @@ export const generateImage = async (
     onStatus?: StatusUpdate
 ): Promise<string> => {
     const ai = getAI();
-    const model = 'gemini-3-pro-image-preview';
+    const model = 'gemini-3.1-flash-image-preview';
     const config: any = { imageConfig: { imageSize: resolution, aspectRatio } };
     const parts: any[] = [];
     
@@ -292,7 +292,7 @@ export const generateUpscaledImage = async (image: File, resolution: '2K' | '4K'
     const ai = getAI();
     if (onStatus) onStatus(`Upscaling to ${resolution}...`);
     const parts = [await fileToPart(image), { text: "High-fidelity upscale. Refine texture density, skin realism, and fine vellus hair structure with micro-shadowing." }];
-    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({ model: 'gemini-3-pro-image-preview', contents: { parts }, config: { imageConfig: { imageSize: resolution } } }), 3, 3000, onStatus);
+    const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({ model: 'gemini-3.1-flash-image-preview', contents: { parts }, config: { imageConfig: { imageSize: resolution } } }), 3, 3000, onStatus);
     for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
@@ -373,7 +373,7 @@ export const generateThreadsContent = async (params: any, onStatus?: StatusUpdat
     const ai = getAI();
     if (onStatus) onStatus("Architecting narrative flow...");
     const response: GenerateContentResponse = await callWithRetry(() => ai.models.generateContent({
-        model: params.usePro ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview',
+        model: params.usePro ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview',
         contents: `Architect high-end ${params.postType} with ${params.brandVoice} voice. Context: ${params.notes}.`,
         config: { tools: params.useSearch ? [{ googleSearch: {} }] : [] }
     }), 3, 2000, onStatus);

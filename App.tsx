@@ -40,7 +40,7 @@ import AssetDetailsPanel from './components/AssetDetailsPanel';
 import { 
   XMarkIcon, UserIcon, PhotoIcon, VideoCameraIcon, PaletteIcon, 
   ScissorsIcon, StackIcon, MagicWandIcon, GridIcon, AtSymbolIcon,
-  BookOpenIcon, ArrowLeftIcon, SparklesIcon, CubeIcon, CheckCircleIcon, InfoIcon, ClockIcon
+  BookOpenIcon, ArrowLeftIcon, SparklesIcon, CubeIcon, CheckCircleIcon, InfoIcon, ClockIcon, LockClosedIcon
 } from './components/icons';
 import StartScreen from './components/StartScreen';
 import Tooltip from './components/Tooltip';
@@ -137,11 +137,33 @@ const App: React.FC = () => {
   const [previewFilters, setPreviewFilters] = useState<PreviewFilters>({ brightness: 100, contrast: 100, saturate: 100, sepia: 0, blur: 0, hueRotate: 0 });
   const [proxyUrl, setProxyUrl] = useState<string | null>(null);
   const [identityVaultImage, setIdentityVaultImage] = useState<File | null>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(true);
 
   // Derived State
   const activeAsset = assets.find(a => a.id === activeAssetId) || null;
   const currentImage = activeAsset ? activeAsset.file : null;
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkApiKey = async () => {
+      // @ts-ignore
+      if (window.aistudio && window.aistudio.hasSelectedApiKey) {
+        // @ts-ignore
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(hasKey);
+      }
+    };
+    checkApiKey();
+  }, []);
+
+  const handleSelectApiKey = async () => {
+    // @ts-ignore
+    if (window.aistudio && window.aistudio.openSelectKey) {
+      // @ts-ignore
+      await window.aistudio.openSelectKey();
+      setHasApiKey(true);
+    }
+  };
 
   // Global Notification Helper
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {
@@ -170,7 +192,13 @@ const App: React.FC = () => {
           if (successMessage) showToast(successMessage, 'success');
       } catch (e: any) {
           console.error(e);
-          setError(e.message || "Operation failed");
+          const errorMessage = e.message || "Operation failed";
+          setError(errorMessage);
+          
+          if (errorMessage.toLowerCase().includes("requested entity was not found")) {
+              setHasApiKey(false);
+              handleSelectApiKey();
+          }
       } finally {
           setIsLoading(false);
           setLoadingMessage('Processing...');
@@ -553,6 +581,30 @@ const App: React.FC = () => {
   const filterString = `brightness(${previewFilters.brightness}%) contrast(${previewFilters.contrast}%) saturate(${previewFilters.saturate}%) sepia(${previewFilters.sepia}%) blur(${previewFilters.blur}px) hue-rotate(${previewFilters.hueRotate}deg)`;
 
   const isRateLimitError = error && (error.includes('429') || error.toLowerCase().includes('quota') || error.toLowerCase().includes('exhausted'));
+
+  if (!hasApiKey) {
+    return (
+      <div className="flex flex-col h-screen bg-[var(--bg-app)] text-[var(--text-main)] overflow-hidden font-sans items-center justify-center">
+        <div className="max-w-md w-full p-8 bg-[var(--bg-panel)] rounded-3xl border border-[var(--border-color)] shadow-2xl text-center space-y-6 animate-studio-in">
+            <div className="w-16 h-16 rounded-full bg-[var(--bg-input)] flex items-center justify-center mx-auto border border-[var(--border-color)]">
+                <LockClosedIcon className="w-8 h-8 text-[var(--text-muted)]" />
+            </div>
+            <div className="space-y-2">
+                <h2 className="text-xl font-black uppercase tracking-widest">API Key Required</h2>
+                <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                    MIVA Studio requires a Gemini API key to access high-fidelity models like gemini-3.1-flash-image-preview.
+                </p>
+            </div>
+            <button 
+                onClick={handleSelectApiKey}
+                className="w-full py-4 bg-[var(--text-main)] text-[var(--bg-app)] font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-premium"
+            >
+                Connect API Key
+            </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-[var(--bg-app)] text-[var(--text-main)] overflow-hidden font-sans selection:bg-[var(--accent-color)] selection:text-[var(--bg-app)] transition-colors duration-500">
